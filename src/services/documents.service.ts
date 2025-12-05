@@ -1,3 +1,4 @@
+import { InjectQueue } from '@nestjs/bullmq';
 import {
   BadRequestException,
   Injectable,
@@ -5,14 +6,12 @@ import {
   NotFoundException,
   PayloadTooLargeException,
 } from '@nestjs/common';
-import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { UploadedFile } from '../common/interfaces/file.interface';
+import { Document, DocumentStatus } from '../models/documents/document.entity';
 import { DocumentsResource } from '../resources/documents.resource';
 import { OrganizationsService } from './organizations.service';
 import { S3Service } from './s3.service';
-import { Document, DocumentStatus } from '../models/documents/document.entity';
-
-type MulterFile = Express.Multer.File;
 
 const ALLOWED_FILE_TYPES = ['pdf', 'docx', 'md', 'txt', 'png', 'jpg', 'jpeg'];
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB default
@@ -29,11 +28,7 @@ export class DocumentsService {
     private documentQueue: Queue,
   ) {}
 
-  async create(
-    file: MulterFile,
-    organizationId: string,
-    agentId?: string,
-  ): Promise<Document> {
+  async create(file: UploadedFile, organizationId: string, agentId?: string): Promise<Document> {
     const fileType = this.getFileType(file.originalname, file.mimetype);
     if (!ALLOWED_FILE_TYPES.includes(fileType)) {
       throw new BadRequestException(
@@ -74,29 +69,21 @@ export class DocumentsService {
 
     const s3Key = `${organizationId}/documents/${document.id}/${document.filename}`;
     try {
-      await this.s3Service.uploadFile(
-        s3Key,
-        file.buffer,
-        file.mimetype,
-        {
-          'organization-id': organizationId,
-          'agent-id': agentId || '',
-          'document-id': document.id,
-        },
-      );
+      await this.s3Service.uploadFile(s3Key, file.buffer, file.mimetype, {
+        'organization-id': organizationId,
+        'agent-id': agentId || '',
+        'document-id': document.id,
+      });
 
-      await this.documentsResource.update(document.id, { s3Key });
+      const updatedDocument = await this.documentsResource.update(document.id, { s3Key });
 
       await this.documentQueue.add('process', {
         documentId: document.id,
       });
 
-      this.logger.log(
-        `Document ${document.id} uploaded and queued for processing`,
-      );
+      this.logger.log(`Document ${document.id} uploaded and queued for processing`);
 
-      const updatedDocument = await this.documentsResource.findOne(document.id);
-      return updatedDocument!;
+      return updatedDocument;
     } catch (error) {
       await this.documentsResource.remove(document);
       this.logger.error(`Error uploading document to S3: ${error.message}`, error.stack);
@@ -148,4 +135,3 @@ export class DocumentsService {
     return extension;
   }
 }
-

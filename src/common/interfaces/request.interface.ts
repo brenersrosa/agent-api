@@ -1,4 +1,4 @@
-import { Request } from 'express';
+import { FastifyRequest } from 'fastify';
 
 export interface AuthenticatedUser {
   userId: string;
@@ -7,6 +7,6 @@ export interface AuthenticatedUser {
   organizationId: string;
 }
 
-export interface AuthenticatedRequest extends Request {
+export interface AuthenticatedRequest extends FastifyRequest {
   user: AuthenticatedUser;
 }

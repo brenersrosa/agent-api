@@ -1,7 +1,7 @@
 import * as crypto from 'node:crypto';
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Request } from 'express';
+import { FastifyRequest } from 'fastify';
 import { Repository } from 'typeorm';
 import { Organization } from '../../models/organizations/organization.entity';
 
@@ -49,7 +49,7 @@ export class ApiKeyGuard implements CanActivate {
     return true;
   }
 
-  private extractApiKey(request: Request): string | null {
+  private extractApiKey(request: FastifyRequest): string | null {
     const apiKeyHeader = request.headers['x-api-key'];
     const authHeader = request.headers.authorization;
 

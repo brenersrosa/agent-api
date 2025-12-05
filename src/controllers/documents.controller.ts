@@ -1,18 +1,14 @@
-/// <reference types="multer" />
 import {
   BadRequestException,
-  Body,
   Controller,
   Delete,
   Get,
   Param,
   Post,
+  Req,
   Request,
-  UploadedFile,
   UseGuards,
-  UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -23,12 +19,11 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { UploadedFile } from '../common/interfaces/file.interface';
 import { AuthenticatedRequest } from '../common/interfaces/request.interface';
-import { DocumentsService } from '../services/documents.service';
 import { UploadDocumentDto } from '../dto/documents/upload-document.dto';
 import { Document } from '../models/documents/document.entity';
-
-type MulterFile = Express.Multer.File;
+import { DocumentsService } from '../services/documents.service';
 
 @ApiTags('documents')
 @Controller('documents')
@@ -38,7 +33,6 @@ export class DocumentsController {
   constructor(private readonly documentsService: DocumentsService) {}
 
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file'))
   @ApiOperation({ summary: 'Enviar documento para processamento' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -70,16 +64,32 @@ export class DocumentsController {
   })
   @ApiResponse({ status: 401, description: 'Não autorizado' })
   @ApiResponse({ status: 413, description: 'Arquivo muito grande' })
-  async upload(
-    @UploadedFile() file: MulterFile,
-    @Body() dto: UploadDocumentDto,
-    @Request() req: AuthenticatedRequest,
-  ) {
+  async upload(@Req() req: AuthenticatedRequest) {
+    const parts = req.parts();
+    let file: UploadedFile | null = null;
+    let agentId: string | undefined;
+
+    for await (const part of parts) {
+      if (part.type === 'file') {
+        const buffer = await part.toBuffer();
+        file = {
+          fieldname: part.fieldname,
+          originalname: part.filename || 'unknown',
+          encoding: part.encoding,
+          mimetype: part.mimetype,
+          size: buffer.length,
+          buffer: buffer,
+        };
+      } else if (part.fieldname === 'agentId') {
+        agentId = part.value as string;
+      }
+    }
+
     if (!file) {
       throw new BadRequestException('Arquivo não fornecido');
     }
 
-    return this.documentsService.create(file, req.user.organizationId, dto.agentId);
+    return this.documentsService.create(file, req.user.organizationId, agentId);
   }
 
   @Get()
