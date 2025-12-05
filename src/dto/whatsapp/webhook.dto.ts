@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsObject, IsOptional, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
+import { IsObject, IsOptional, IsString, ValidateNested } from 'class-validator';
 
 export class PlugzApiWebhookData {
   @ApiProperty({ description: 'ID da mensagem' })
@@ -66,7 +66,7 @@ export class PlugzApiWebhookData {
   @IsOptional()
   timestamp?: number;
 
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export class WebhookDto {

@@ -7,21 +7,17 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Security
   app.use(helmet());
 
-  // CORS
   const corsOrigins = process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000'];
   app.enableCors({
     origin: corsOrigins,
     credentials: true,
   });
 
-  // Global prefix
   const apiPrefix = process.env.API_PREFIX || 'api/v1';
   app.setGlobalPrefix(apiPrefix);
 
-  // Validation
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -30,7 +26,6 @@ async function bootstrap() {
     }),
   );
 
-  // Swagger
   const config = new DocumentBuilder()
     .setTitle('Agent API')
     .setDescription('API para Agentes WhatsApp com RAG')

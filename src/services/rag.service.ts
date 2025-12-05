@@ -1,13 +1,17 @@
 import { Injectable } from '@nestjs/common';
+import { QueryDto } from '../dto/rag/query.dto';
 import { VectorSearchOptions, VectorService } from './vector.service';
+
+interface RagQueryDto extends QueryDto {
+  organizationId: string;
+  queryEmbedding?: number[];
+}
 
 @Injectable()
 export class RagService {
   constructor(private readonly vectorService: VectorService) {}
 
-  async query(dto: any) {
-    // TODO: Implementar lógica RAG completa
-    // Por enquanto, apenas estrutura básica usando VectorService
+  async query(dto: RagQueryDto) {
     const searchOptions: VectorSearchOptions = {
       organizationId: dto.organizationId,
       agentId: dto.agentId,
@@ -15,7 +19,6 @@ export class RagService {
       minScore: 0.7,
     };
 
-    // Se houver query e embedding, fazer busca vetorial
     if (dto.query && dto.queryEmbedding) {
       const results = await this.vectorService.search(dto.queryEmbedding, searchOptions);
 
@@ -44,4 +47,3 @@ export class RagService {
     };
   }
 }
-

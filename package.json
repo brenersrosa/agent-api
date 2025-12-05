@@ -7,6 +7,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
+    "build:bun": "nest build && bun build dist/main.js --outfile dist/main.bun.js --target node --minify --external @nestjs/microservices --external @nestjs/websockets --external mock-aws-s3 --external nock --external class-transformer",
     "format": "biome format --write .",
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",

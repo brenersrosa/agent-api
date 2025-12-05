@@ -3,7 +3,6 @@ import { Injectable } from '@nestjs/common';
 @Injectable()
 export class AdminService {
   async getDashboard() {
-    // TODO: Implementar dashboard
     return {
       stats: {
         totalOrganizations: 0,
@@ -15,7 +14,6 @@ export class AdminService {
   }
 
   async reindexDocument(id: string) {
-    // TODO: Implementar reindexação
     return { status: 'accepted', documentId: id };
   }
 }

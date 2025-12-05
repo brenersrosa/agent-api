@@ -20,19 +20,16 @@ import { WhatsAppModule } from './whatsapp.module';
 
 @Module({
   imports: [
-    // Configuration
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['.env.local', '.env'],
     }),
 
-    // Database
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useClass: DatabaseConfig,
     }),
 
-    // Redis / BullMQ
     BullModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
@@ -44,7 +41,6 @@ import { WhatsAppModule } from './whatsapp.module';
       inject: [ConfigService],
     }),
 
-    // Application Modules
     CommonModule,
     AuthModule,
     UsersModule,

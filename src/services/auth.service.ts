@@ -21,17 +21,14 @@ export class AuthService {
   ) {}
 
   async register(registerDto: RegisterDto) {
-    // Verificar se email já existe
     const existingUser = await this.usersResource.findByEmail(registerDto.email);
 
     if (existingUser) {
       throw new ConflictException('Email already exists');
     }
 
-    // Hash da senha
     const passwordHash = await bcrypt.hash(registerDto.password, 12);
 
-    // Criar usuário
     const user = await this.usersResource.create({
       email: registerDto.email,
       passwordHash,
@@ -39,21 +36,18 @@ export class AuthService {
       lastName: registerDto.lastName,
     });
 
-    // Criar organização
     const slug = this.generateSlug(registerDto.organizationName);
     const organization = await this.organizationsResource.create({
       name: registerDto.organizationName,
       slug,
     });
 
-    // Associar usuário à organização como owner
     await this.userOrganizationResource.create({
       userId: user.id,
       organizationId: organization.id,
       role: OrganizationRole.OWNER,
     });
 
-    // Gerar tokens
     const tokens = await this.generateTokens(user.id, organization.id);
 
     return {
@@ -88,10 +82,8 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Atualizar último login
     await this.usersResource.update(user.id, { lastLoginAt: new Date() });
 
-    // Pegar primeira organização do usuário
     const userOrg = user.organizations?.[0];
     const organizationId = userOrg?.organizationId;
 
@@ -128,17 +120,13 @@ export class AuthService {
       throw new UnauthorizedException('Organization not found');
     }
 
-    // Gerar chave: org_{org_id}_{random_32_chars}
     const randomPart = crypto.randomBytes(16).toString('hex');
     const apiKey = `org_${organizationId}_${randomPart}`;
 
-    // Hash da chave
     const hash = crypto.createHash('sha256').update(apiKey).digest('hex');
 
-    // Salvar hash
     await this.organizationsResource.update(organizationId, { apiKeyHash: hash });
 
-    // Retornar chave plaintext (apenas uma vez)
     return apiKey;
   }
 

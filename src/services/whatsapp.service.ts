@@ -2,22 +2,64 @@ import { HttpService } from '@nestjs/axios';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
+import {
+  getErrorMessage,
+  getErrorResponseData,
+  getErrorStack,
+} from '../common/helpers/error.helper';
+import { PlugzApiWebhookData } from '../dto/whatsapp/webhook.dto';
+import { Conversation, ConversationStatus } from '../models/whatsapp/conversation.entity';
+import { MessageDirection, MessageType } from '../models/whatsapp/message.entity';
 import { ConversationsResource } from '../resources/conversations.resource';
 import { MessagesResource } from '../resources/messages.resource';
-import { Conversation, ConversationStatus } from '../models/whatsapp/conversation.entity';
-import { Message, MessageDirection, MessageType } from '../models/whatsapp/message.entity';
+
+interface PlugzApiResponseData {
+  messageId?: string;
+  id?: string;
+  [key: string]: unknown;
+}
 
 interface PlugzApiResponse {
   success: boolean;
   message?: string;
-  data?: any;
+  data?: PlugzApiResponseData | PlugzApiResponseData[];
 }
 
 interface PlugzApiWebhook {
   instance: string;
   event: string;
-  data: any;
+  data: PlugzApiWebhookData;
 }
+
+interface PlugzApiChat {
+  id?: string;
+  phone?: string;
+  phoneNumber?: string;
+  name?: string;
+  contactName?: string;
+  unreadCount?: number;
+  lastMessage?: string;
+  timestamp?: number;
+}
+
+interface PlugzApiMessage {
+  id?: string;
+  messageId?: string;
+  fromMe?: boolean;
+  body?: string;
+  message?: string;
+  text?: string;
+  type?: string;
+  mediaUrl?: string;
+  url?: string;
+}
+
+type PlugzApiMessagePayload =
+  | { phone: string; delay: number; message: string }
+  | { phone: string; delay: number; image: string; caption: string }
+  | { phone: string; delay: number; audio: string }
+  | { phone: string; delay: number; video: string; caption: string }
+  | { phone: string; delay: number; document: string; fileName: string };
 
 interface SendMessageParams {
   to: string;
@@ -42,10 +84,8 @@ export class WhatsAppService {
     private readonly messagesResource: MessagesResource,
   ) {
     this.baseUrl =
-      this.configService.get<string>('PLUGZAPI_BASE_URL') ||
-      'https://api.plugzapi.com.br';
-    this.instanceId =
-      this.configService.get<string>('PLUGZAPI_INSTANCE_ID') || '';
+      this.configService.get<string>('PLUGZAPI_BASE_URL') || 'https://api.plugzapi.com.br';
+    this.instanceId = this.configService.get<string>('PLUGZAPI_INSTANCE_ID') || '';
     this.token = this.configService.get<string>('PLUGZAPI_TOKEN') || '';
   }
 
@@ -57,11 +97,9 @@ export class WhatsAppService {
   }
 
   private formatPhoneNumber(phone: string): string {
-    // Remove caracteres não numéricos
     let cleaned = phone.replace(/\D/g, '');
-    // Se não começar com código do país, assume Brasil (55)
     if (!cleaned.startsWith('55') && cleaned.length <= 11) {
-      cleaned = '55' + cleaned;
+      cleaned = `55${cleaned}`;
     }
     return cleaned;
   }
@@ -72,16 +110,14 @@ export class WhatsAppService {
 
     try {
       let endpoint = '';
-      let payload: any = {
-        phone,
-        delay: delay || 0,
-      };
+      let payload: PlugzApiMessagePayload;
 
       switch (messageType) {
         case 'image':
           endpoint = '/message/send-message-image';
           payload = {
-            ...payload,
+            phone,
+            delay: delay || 0,
             image: mediaUrl || message,
             caption: message,
           };
@@ -89,14 +125,16 @@ export class WhatsAppService {
         case 'audio':
           endpoint = '/message/send-message-audio';
           payload = {
-            ...payload,
+            phone,
+            delay: delay || 0,
             audio: mediaUrl || message,
           };
           break;
         case 'video':
           endpoint = '/message/send-message-video';
           payload = {
-            ...payload,
+            phone,
+            delay: delay || 0,
             video: mediaUrl || message,
             caption: message,
           };
@@ -104,7 +142,8 @@ export class WhatsAppService {
         case 'document':
           endpoint = '/message/send-message-document';
           payload = {
-            ...payload,
+            phone,
+            delay: delay || 0,
             document: mediaUrl || message,
             fileName: message,
           };
@@ -112,7 +151,8 @@ export class WhatsAppService {
         default:
           endpoint = '/message/send-message-text';
           payload = {
-            ...payload,
+            phone,
+            delay: delay || 0,
             message,
           };
       }
@@ -126,10 +166,10 @@ export class WhatsAppService {
         }),
       );
 
-      if (response.data.success) {
-        const messageId = response.data.data?.messageId || response.data.data?.id;
+      if (response.data.success && response.data.data) {
+        const data = Array.isArray(response.data.data) ? response.data.data[0] : response.data.data;
+        const messageId = data?.messageId || data?.id;
 
-        // Salvar mensagem no banco
         await this.saveOutboundMessage(
           params.organizationId,
           phone,
@@ -147,10 +187,17 @@ export class WhatsAppService {
       }
 
       throw new Error(response.data.message || 'Erro ao enviar mensagem');
-    } catch (error: any) {
-      this.logger.error(`Erro ao enviar mensagem: ${error.message}`, error.stack);
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error);
+      const errorStack = getErrorStack(error);
+      const responseData = getErrorResponseData(error);
+      this.logger.error(`Erro ao enviar mensagem: ${errorMessage}`, errorStack);
       throw new Error(
-        error.response?.data?.message || error.message || 'Erro ao enviar mensagem',
+        (responseData && typeof responseData === 'object' && 'message' in responseData
+          ? String(responseData.message)
+          : null) ||
+          errorMessage ||
+          'Erro ao enviar mensagem',
       );
     }
   }
@@ -182,32 +229,30 @@ export class WhatsAppService {
       }
 
       return { status: 'ok', event };
-    } catch (error: any) {
-      this.logger.error(`Erro ao processar webhook: ${error.message}`, error.stack);
-      return { status: 'error', message: error.message };
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error);
+      const errorStack = getErrorStack(error);
+      this.logger.error(`Erro ao processar webhook: ${errorMessage}`, errorStack);
+      return { status: 'error', message: errorMessage };
     }
   }
 
-  private async handleIncomingMessage(data: any) {
+  private async handleIncomingMessage(data: PlugzApiWebhookData) {
     try {
       const phone = data.from || data.phone;
       const messageContent = data.body || data.message || data.text || '';
       const messageId = data.id || data.messageId;
       const messageType = this.mapPlugzMessageType(data.type);
 
-      // Buscar ou criar conversa
-      let conversation = await this.conversationsResource.findOneByPhone(phone);
+      const conversation = await this.conversationsResource.findOneByPhone(phone);
 
       if (!conversation) {
-        // Se não encontrar, criar uma nova (precisa de organizationId)
-        // Por enquanto, vamos logar e não criar
         this.logger.warn(
           `Conversa não encontrada para ${phone}. Criar conversa requer organizationId.`,
         );
         return;
       }
 
-      // Salvar mensagem recebida
       await this.messagesResource.create({
         conversationId: conversation.id,
         direction: MessageDirection.INBOUND,
@@ -217,50 +262,50 @@ export class WhatsAppService {
         mediaUrl: data.mediaUrl || data.url || null,
       });
 
-      // Atualizar última mensagem da conversa
       await this.conversationsResource.save({
         ...conversation,
         lastMessageAt: new Date(),
       });
 
       this.logger.log(`Mensagem recebida salva: ${messageId}`);
-    } catch (error: any) {
-      this.logger.error(
-        `Erro ao processar mensagem recebida: ${error.message}`,
-        error.stack,
-      );
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error);
+      const errorStack = getErrorStack(error);
+      this.logger.error(`Erro ao processar mensagem recebida: ${errorMessage}`, errorStack);
     }
   }
 
-  private async handleMessageSent(data: any) {
+  private async handleMessageSent(data: PlugzApiWebhookData) {
     try {
       const messageId = data.id || data.messageId;
       if (messageId) {
         const message = await this.messagesResource.findByWhatsAppMessageId(messageId);
         if (message) {
-          // Atualizar status se necessário
           this.logger.log(`Mensagem enviada confirmada: ${messageId}`);
         }
       }
-    } catch (error: any) {
-      this.logger.error(`Erro ao processar mensagem enviada: ${error.message}`, error.stack);
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error);
+      const errorStack = getErrorStack(error);
+      this.logger.error(`Erro ao processar mensagem enviada: ${errorMessage}`, errorStack);
     }
   }
 
-  private async handleMessageStatus(data: any) {
+  private async handleMessageStatus(data: PlugzApiWebhookData) {
     try {
       const messageId = data.id || data.messageId;
-      const status = data.status; // RECEIVED, READ, etc.
+      const status = data.status;
 
       if (messageId) {
         const message = await this.messagesResource.findByWhatsAppMessageId(messageId);
         if (message) {
-          // Atualizar metadata com status
           this.logger.log(`Status da mensagem atualizado: ${messageId} - ${status}`);
         }
       }
-    } catch (error: any) {
-      this.logger.error(`Erro ao processar status: ${error.message}`, error.stack);
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error);
+      const errorStack = getErrorStack(error);
+      this.logger.error(`Erro ao processar status: ${errorMessage}`, errorStack);
     }
   }
 
@@ -284,7 +329,6 @@ export class WhatsAppService {
     whatsappMessageId?: string,
   ) {
     try {
-      // Buscar ou criar conversa
       let conversation = await this.conversationsResource.findByPhone(organizationId, phone);
 
       if (!conversation) {
@@ -296,7 +340,6 @@ export class WhatsAppService {
         });
       }
 
-      // Salvar mensagem
       await this.messagesResource.create({
         conversationId: conversation.id,
         direction: MessageDirection.OUTBOUND,
@@ -306,13 +349,14 @@ export class WhatsAppService {
         mediaUrl,
       });
 
-      // Atualizar última mensagem
       await this.conversationsResource.save({
         ...conversation,
         lastMessageAt: new Date(),
       });
-    } catch (error: any) {
-      this.logger.error(`Erro ao salvar mensagem: ${error.message}`, error.stack);
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error);
+      const errorStack = getErrorStack(error);
+      this.logger.error(`Erro ao salvar mensagem: ${errorMessage}`, errorStack);
     }
   }
 
@@ -328,12 +372,11 @@ export class WhatsAppService {
       );
 
       if (response.data.success && response.data.data) {
-        const chats = Array.isArray(response.data.data)
-          ? response.data.data
-          : [response.data.data];
+        const chats: PlugzApiChat[] = Array.isArray(response.data.data)
+          ? (response.data.data as PlugzApiChat[])
+          : [response.data.data as PlugzApiChat];
 
-        // Sincronizar com banco de dados local
-        const conversations = [];
+        const conversations: Conversation[] = [];
         for (const chat of chats) {
           const phone = chat.id || chat.phone || chat.phoneNumber;
           if (!phone) continue;
@@ -353,12 +396,9 @@ export class WhatsAppService {
                 unreadCount: chat.unreadCount || 0,
                 lastMessage: chat.lastMessage || null,
               },
-              lastMessageAt: chat.timestamp
-                ? new Date(chat.timestamp * 1000)
-                : new Date(),
+              lastMessageAt: chat.timestamp ? new Date(chat.timestamp * 1000) : new Date(),
             });
           } else {
-            // Atualizar dados
             await this.conversationsResource.save({
               ...conversation,
               contactName: chat.name || chat.contactName || conversation.contactName,
@@ -374,20 +414,19 @@ export class WhatsAppService {
             conversation = await this.conversationsResource.findOne(conversation.id, ['messages']);
           }
 
-          conversations.push(conversation!);
+          if (conversation) {
+            conversations.push(conversation);
+          }
         }
 
         return conversations;
       }
 
-      // Se a API não retornar dados, retornar do banco local
       return this.conversationsResource.findByOrganization(organizationId, ['messages']);
-    } catch (error: any) {
-      this.logger.error(
-        `Erro ao buscar conversas: ${error.message}`,
-        error.stack,
-      );
-      // Em caso de erro, retornar do banco local
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error);
+      const errorStack = getErrorStack(error);
+      this.logger.error(`Erro ao buscar conversas: ${errorMessage}`, errorStack);
       return this.conversationsResource.findByOrganization(organizationId, ['messages']);
     }
   }
@@ -398,8 +437,10 @@ export class WhatsAppService {
       const url = `${this.baseUrl}/chats/get-message-chats`;
       this.logger.log(`Buscando mensagens do chat ${formattedPhone}`);
 
-      // Buscar conversa local primeiro
-      let conversation = await this.conversationsResource.findByPhone(organizationId, formattedPhone);
+      let conversation = await this.conversationsResource.findByPhone(
+        organizationId,
+        formattedPhone,
+      );
 
       const response = await firstValueFrom(
         this.httpService.get<PlugzApiResponse>(url, {
@@ -411,11 +452,10 @@ export class WhatsAppService {
       );
 
       if (response.data.success && response.data.data) {
-        const messages = Array.isArray(response.data.data)
-          ? response.data.data
-          : [response.data.data];
+        const messages: PlugzApiMessage[] = Array.isArray(response.data.data)
+          ? (response.data.data as PlugzApiMessage[])
+          : [response.data.data as PlugzApiMessage];
 
-        // Criar conversa se não existir
         if (!conversation) {
           conversation = await this.conversationsResource.create({
             organizationId,
@@ -425,18 +465,15 @@ export class WhatsAppService {
           });
         }
 
-        // Sincronizar mensagens
         for (const msg of messages) {
           const existingMessage = await this.messagesResource.findByWhatsAppMessageId(
             msg.id || msg.messageId,
           );
 
-          if (!existingMessage) {
+          if (!existingMessage && conversation) {
             await this.messagesResource.create({
-              conversationId: conversation!.id,
-              direction: msg.fromMe
-                ? MessageDirection.OUTBOUND
-                : MessageDirection.INBOUND,
+              conversationId: conversation.id,
+              direction: msg.fromMe ? MessageDirection.OUTBOUND : MessageDirection.INBOUND,
               whatsappMessageId: msg.id || msg.messageId,
               content: msg.body || msg.message || msg.text || '',
               messageType: this.mapPlugzMessageType(msg.type),
@@ -446,16 +483,16 @@ export class WhatsAppService {
         }
       }
 
-      // Retornar mensagens do banco local
       if (conversation) {
         return this.messagesResource.findByConversation(conversation.id, { createdAt: 'ASC' });
       }
 
       return [];
-    } catch (error: any) {
-      this.logger.error(`Erro ao buscar mensagens: ${error.message}`, error.stack);
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error);
+      const errorStack = getErrorStack(error);
+      this.logger.error(`Erro ao buscar mensagens: ${errorMessage}`, errorStack);
       return [];
     }
   }
 }
-

@@ -32,13 +32,6 @@ export class S3Service {
     this.s3 = new AWS.S3(s3Config);
   }
 
-  /**
-   * Upload file to S3
-   * @param key S3 key (path)
-   * @param buffer File buffer
-   * @param contentType MIME type
-   * @param metadata Additional metadata
-   */
   async uploadFile(
     key: string,
     buffer: Buffer,
@@ -65,11 +58,6 @@ export class S3Service {
     }
   }
 
-  /**
-   * Get file from S3
-   * @param bucket S3 bucket name
-   * @param key S3 key (path)
-   */
   async getObject(bucket: string, key: string): Promise<Buffer> {
     try {
       const params: AWS.S3.GetObjectRequest = {
@@ -83,12 +71,10 @@ export class S3Service {
         throw new Error('Empty response body from S3');
       }
 
-      // AWS SDK v2 returns Body as Buffer by default
       if (Buffer.isBuffer(result.Body)) {
         return result.Body;
       }
 
-      // Fallback: convert to Buffer if it's a string or Uint8Array
       return Buffer.from(result.Body as any);
     } catch (error) {
       this.logger.error(`Error getting object from S3: ${error.message}`, error.stack);
@@ -96,10 +82,6 @@ export class S3Service {
     }
   }
 
-  /**
-   * Delete file from S3
-   * @param key S3 key (path)
-   */
   async deleteFile(key: string): Promise<void> {
     try {
       const params: AWS.S3.DeleteObjectRequest = {
@@ -116,9 +98,6 @@ export class S3Service {
     }
   }
 
-  /**
-   * Get bucket name
-   */
   getBucket(): string {
     return this.bucket;
   }

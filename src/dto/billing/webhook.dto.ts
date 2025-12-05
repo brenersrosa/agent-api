@@ -1,3 +1,3 @@
 export class StripeWebhookDto {
-  [key: string]: any;
+  [key: string]: unknown;
 }

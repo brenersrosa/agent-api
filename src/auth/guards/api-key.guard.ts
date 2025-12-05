@@ -1,6 +1,7 @@
 import * as crypto from 'node:crypto';
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { Request } from 'express';
 import { Repository } from 'typeorm';
 import { Organization } from '../../models/organizations/organization.entity';
 
@@ -16,10 +17,9 @@ export class ApiKeyGuard implements CanActivate {
     const apiKey = this.extractApiKey(request);
 
     if (!apiKey) {
-      return false; // Deixa JWT guard tentar
+      return false;
     }
 
-    // Formato: org_{org_id}_{random_32_chars}
     const parts = apiKey.split('_');
     if (parts.length !== 3 || parts[0] !== 'org') {
       throw new UnauthorizedException('Invalid API key format');
@@ -27,7 +27,6 @@ export class ApiKeyGuard implements CanActivate {
 
     const organizationId = parts[1];
 
-    // Buscar organização e validar hash
     const organization = await this.organizationRepository.findOne({
       where: { id: organizationId },
     });
@@ -36,14 +35,12 @@ export class ApiKeyGuard implements CanActivate {
       throw new UnauthorizedException('Invalid API key');
     }
 
-    // Verificar hash
     const hash = crypto.createHash('sha256').update(apiKey).digest('hex');
 
     if (hash !== organization.apiKeyHash) {
       throw new UnauthorizedException('Invalid API key');
     }
 
-    // Adicionar organização ao request
     request.apiKey = {
       organizationId: organization.id,
       organization: organization,
@@ -52,11 +49,18 @@ export class ApiKeyGuard implements CanActivate {
     return true;
   }
 
-  private extractApiKey(request: any): string | null {
-    return (
-      request.headers['x-api-key'] ||
-      request.headers['authorization']?.replace('Bearer ', '') ||
-      null
-    );
+  private extractApiKey(request: Request): string | null {
+    const apiKeyHeader = request.headers['x-api-key'];
+    const authHeader = request.headers.authorization;
+
+    if (typeof apiKeyHeader === 'string') {
+      return apiKeyHeader;
+    }
+
+    if (typeof authHeader === 'string') {
+      return authHeader.replace('Bearer ', '');
+    }
+
+    return null;
   }
 }
