@@ -1,13 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNumber, IsOptional, IsPhoneNumber, IsString, IsUrl, Max, Min } from 'class-validator';
+import { IsNumber, IsOptional, IsPhoneNumber, IsString, Max, Min } from 'class-validator';
 
 export class CreateAgentDto {
   @ApiProperty({ description: 'Nome do agente' })
   @IsString()
   name: string;
 
-  @ApiProperty({ required: false, description: 'URL do avatar do agente' })
-  @IsUrl()
+  @ApiProperty({ required: false, description: 'URL do avatar do agente (pode ser URL externa ou será definido via upload)' })
+  @IsString()
   @IsOptional()
   avatarUrl?: string;
 

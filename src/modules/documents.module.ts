@@ -4,8 +4,14 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { OrganizationsModule } from './organizations.module';
 import { DocumentsController } from '../controllers/documents.controller';
 import { DocumentsService } from '../services/documents.service';
-import { S3Service } from '../services/s3.service';
+import { UploadProgressService } from '../services/upload-progress.service';
 import { DocumentsResource } from '../resources/documents.resource';
+import { DocumentChunksResource } from '../resources/document-chunks.resource';
+import { DocumentProcessorService } from '../services/document-processor.service';
+import { TextExtractionService } from '../services/text-extraction.service';
+import { ChunkingService } from '../services/chunking.service';
+import { EmbeddingsService } from '../services/embeddings.service';
+import { VectorService } from '../services/vector.service';
 import { DocumentChunk } from '../models/documents/document-chunk.entity';
 import { Document } from '../models/documents/document.entity';
 
@@ -18,7 +24,17 @@ import { Document } from '../models/documents/document.entity';
     OrganizationsModule,
   ],
   controllers: [DocumentsController],
-  providers: [DocumentsService, S3Service, DocumentsResource],
-  exports: [DocumentsService],
+  providers: [
+    DocumentsService,
+    UploadProgressService,
+    DocumentsResource,
+    DocumentChunksResource,
+    DocumentProcessorService,
+    TextExtractionService,
+    ChunkingService,
+    EmbeddingsService,
+    VectorService,
+  ],
+  exports: [DocumentsService, EmbeddingsService, VectorService, DocumentsResource],
 })
 export class DocumentsModule {}

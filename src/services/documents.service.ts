@@ -110,6 +110,85 @@ export class DocumentsService {
     await this.documentsResource.remove(document);
   }
 
+  /**
+   * Reprocessa um documento específico
+   * Útil para documentos que falharam ou que ainda estão com status 'uploaded'
+   */
+  async reprocess(id: string): Promise<Document> {
+    const document = await this.findOne(id);
+
+    // Verifica se o documento pode ser reprocessado
+    if (document.status === DocumentStatus.PROCESSING) {
+      throw new BadRequestException('Documento já está sendo processado');
+    }
+
+    if (!document.s3Key) {
+      throw new BadRequestException('Documento não possui arquivo no S3');
+    }
+
+    // Reseta o status e limpa erros anteriores
+    await this.documentsResource.update(id, {
+      status: DocumentStatus.UPLOADED,
+      processingError: null,
+      chunkCount: 0,
+    });
+
+    // Enfileira para processamento
+    await this.documentQueue.add('process', {
+      documentId: id,
+    });
+
+    this.logger.log(`Document ${id} queued for reprocessing`);
+
+    return this.findOne(id);
+  }
+
+  /**
+   * Reprocessa todos os documentos pendentes ou falhados de uma organização
+   */
+  async reprocessAll(
+    organizationId: string,
+    status?: DocumentStatus,
+  ): Promise<{
+    queued: number;
+    documents: Document[];
+  }> {
+    const documents = await this.documentsResource.findByOrganization(organizationId);
+
+    // Filtra documentos que precisam ser reprocessados
+    let documentsToReprocess = documents.filter(
+      (doc) => doc.status === DocumentStatus.UPLOADED || doc.status === DocumentStatus.FAILED,
+    );
+
+    // Se um status específico foi fornecido, filtra por ele
+    if (status) {
+      documentsToReprocess = documentsToReprocess.filter((doc) => doc.status === status);
+    }
+
+    // Remove documentos sem s3Key
+    documentsToReprocess = documentsToReprocess.filter((doc) => doc.s3Key);
+
+    let queued = 0;
+
+    // Reprocessa cada documento
+    for (const document of documentsToReprocess) {
+      try {
+        await this.reprocess(document.id);
+        queued++;
+      } catch (error) {
+        this.logger.error(
+          `Error reprocessing document ${document.id}: ${error.message}`,
+          error.stack,
+        );
+      }
+    }
+
+    return {
+      queued,
+      documents: documentsToReprocess,
+    };
+  }
+
   private getFileType(filename: string, mimetype: string): string {
     const extension = filename.split('.').pop()?.toLowerCase() || '';
 

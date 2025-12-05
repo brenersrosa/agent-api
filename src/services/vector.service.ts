@@ -36,19 +36,21 @@ export class VectorService {
   ) {}
 
   async upsertVectors(
-    chunks: Array<DocumentChunk & { embedding?: number[] | string }>,
+    chunks: Array<Partial<DocumentChunk> & { embedding?: number[] | string }>,
   ): Promise<void> {
     if (chunks.length === 0) return;
 
     const chunksToSave = chunks.map((chunk) => {
-      const chunkCopy = { ...chunk };
+      const chunkCopy: Partial<DocumentChunk> = { ...chunk };
       if (chunkCopy.embedding && Array.isArray(chunkCopy.embedding)) {
         chunkCopy.embedding = `[${chunkCopy.embedding.join(',')}]`;
       }
-      return chunkCopy as DocumentChunk;
+      return chunkCopy;
     });
 
-    await this.chunkRepository.save(chunksToSave);
+    // Usa create e save para garantir que os chunks sejam criados corretamente
+    const entities = this.chunkRepository.create(chunksToSave);
+    await this.chunkRepository.save(entities);
   }
 
   async search(queryVector: number[], options: VectorSearchOptions): Promise<VectorSearchResult[]> {
@@ -57,6 +59,8 @@ export class VectorService {
 
     const vectorString = `[${queryVector.join(',')}]`;
 
+    // Usa CAST para garantir que o embedding seja tratado como vector
+    // Isso funciona mesmo se a coluna estiver como text no banco
     let query = `
       SELECT 
         dc.id,
@@ -64,12 +68,12 @@ export class VectorService {
         dc.document_id as "documentId",
         dc.chunk_index as "chunkIndex",
         dc.metadata,
-        1 - (dc.embedding <=> $1::vector) as similarity
+        1 - (CAST(dc.embedding AS vector) <=> $1::vector) as similarity
       FROM document_chunks dc
       INNER JOIN documents d ON dc.document_id = d.id
       WHERE d.organization_id = $2
         AND dc.embedding IS NOT NULL
-        AND (1 - (dc.embedding <=> $1::vector)) >= $3
+        AND (1 - (CAST(dc.embedding AS vector) <=> $1::vector)) >= $3
     `;
 
     const params: (string | number)[] = [vectorString, options.organizationId, minScore];
@@ -80,7 +84,7 @@ export class VectorService {
     }
 
     query += `
-      ORDER BY dc.embedding <=> $1::vector
+      ORDER BY CAST(dc.embedding AS vector) <=> $1::vector
       LIMIT $${params.length + 1}
     `;
     params.push(topK);

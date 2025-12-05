@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nes
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthenticatedRequest } from '../common/interfaces/request.interface';
 import { QueryDto } from '../dto/rag/query.dto';
+import { QueryResponseDto } from '../dto/rag/query-response.dto';
 import { RagService } from '../services/rag.service';
 
 @ApiTags('rag')
@@ -18,9 +19,10 @@ export class RagController {
   @ApiResponse({
     status: 200,
     description: 'Consulta RAG executada com sucesso',
+    type: QueryResponseDto,
   })
   @ApiResponse({ status: 401, description: 'Não autorizado' })
-  async query(@Body() dto: QueryDto, @Request() req: AuthenticatedRequest) {
+  async query(@Body() dto: QueryDto, @Request() req: AuthenticatedRequest): Promise<QueryResponseDto> {
     return this.ragService.query({
       ...dto,
       organizationId: req.user.organizationId,

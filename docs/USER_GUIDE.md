@@ -95,11 +95,16 @@ curl -X POST http://localhost:3000/agents \
 **Parâmetros:**
 
 - `name` (obrigatório): Nome do agente
+- `avatarUrl` (opcional): URL do avatar do agente (pode ser URL externa ou será definido via upload separado)
 - `systemPrompt` (opcional): Instruções de comportamento do agente
 - `llmModel` (opcional): Modelo LLM a usar (padrão: "gpt-4o")
 - `temperature` (opcional): Criatividade (0-1, padrão: 0.7)
 - `maxTokens` (opcional): Máximo de tokens na resposta (padrão: 1000)
 - `whatsappPhoneNumber` (opcional): Número WhatsApp associado
+
+**Nota sobre Avatar:** Você pode definir o avatar de duas formas:
+1. Via JSON usando `avatarUrl` com uma URL externa
+2. Via upload de arquivo usando o endpoint `POST /agents/{id}/avatar` (recomendado)
 
 **Resposta:**
 
@@ -148,6 +153,75 @@ curl -X PUT http://localhost:3000/agents/{agentId} \
 ```bash
 curl -X DELETE http://localhost:3000/agents/{agentId} \
   -H "Authorization: Bearer SEU_ACCESS_TOKEN"
+```
+
+#### Upload de Avatar do Agente
+
+**Endpoint:** `POST /agents/{id}/avatar`
+
+O upload de avatar é feito em uma rota separada para facilitar o manuseio no front-end. O arquivo de imagem é enviado via `multipart/form-data` e o agente é atualizado automaticamente com a URL do avatar.
+
+**Formatos suportados:** PNG, JPG, JPEG, WEBP, SVG
+**Tamanho máximo:** 5MB
+
+```bash
+curl -X POST http://localhost:3000/agents/{agentId}/avatar \
+  -H "Authorization: Bearer SEU_ACCESS_TOKEN" \
+  -F "file=@/caminho/para/avatar.png"
+```
+
+**Resposta:**
+
+```json
+{
+  "id": "uuid-do-agente",
+  "organizationId": "uuid-da-organizacao",
+  "name": "Atendente Virtual",
+  "avatarUrl": "http://localhost:9000/agent-documents-dev/{orgId}/avatars/{agentId}/avatar.png",
+  "systemPrompt": "Você é um assistente virtual...",
+  "llmModel": "gpt-4o",
+  "temperature": 0.7,
+  "maxTokens": 1000,
+  "isActive": true,
+  "whatsappPhoneNumber": "5511999999999",
+  "createdAt": "2024-01-15T10:00:00Z",
+  "updatedAt": "2024-01-15T10:30:00Z"
+}
+```
+
+**Notas:**
+- O avatar anterior é automaticamente removido do S3 ao fazer um novo upload
+- Se o agente não pertence à sua organização, retornará erro 403
+- A URL retornada aponta para o arquivo no S3/MinIO
+
+#### Remover Avatar do Agente
+
+**Endpoint:** `DELETE /agents/{id}/avatar`
+
+Remove o avatar do agente e limpa o campo `avatarUrl`.
+
+```bash
+curl -X DELETE http://localhost:3000/agents/{agentId}/avatar \
+  -H "Authorization: Bearer SEU_ACCESS_TOKEN"
+```
+
+**Resposta:**
+
+```json
+{
+  "id": "uuid-do-agente",
+  "organizationId": "uuid-da-organizacao",
+  "name": "Atendente Virtual",
+  "avatarUrl": null,
+  "systemPrompt": "Você é um assistente virtual...",
+  "llmModel": "gpt-4o",
+  "temperature": 0.7,
+  "maxTokens": 1000,
+  "isActive": true,
+  "whatsappPhoneNumber": "5511999999999",
+  "createdAt": "2024-01-15T10:00:00Z",
+  "updatedAt": "2024-01-15T10:35:00Z"
+}
 ```
 
 ---

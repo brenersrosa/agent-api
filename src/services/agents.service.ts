@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { AgentsResource } from '../resources/agents.resource';
 import { Agent } from '../models/agents/agent.entity';
 
@@ -33,6 +33,20 @@ export class AgentsService {
     }
 
     return agent;
+  }
+
+  async findOneWithOrganization(id: string, organizationId: string): Promise<Agent> {
+    const agent = await this.findOne(id);
+
+    if (agent.organizationId !== organizationId) {
+      throw new ForbiddenException('Agent does not belong to your organization');
+    }
+
+    return agent;
+  }
+
+  async updateAvatarUrl(id: string, avatarUrl: string | null): Promise<Agent> {
+    return this.agentsResource.update(id, { avatarUrl });
   }
 }
 

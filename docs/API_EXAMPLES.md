@@ -371,6 +371,122 @@ curl -X DELETE http://localhost:3000/agents/{agentId} \
   -H "Authorization: Bearer SEU_ACCESS_TOKEN"
 ```
 
+### 3.5 Upload de Avatar do Agente
+
+**curl:**
+
+```bash
+curl -X POST http://localhost:3000/agents/{agentId}/avatar \
+  -H "Authorization: Bearer SEU_ACCESS_TOKEN" \
+  -F "file=@/caminho/para/avatar.png"
+```
+
+**JavaScript (FormData):**
+
+```javascript
+const accessToken = localStorage.getItem('accessToken');
+const fileInput = document.querySelector('input[type="file"]');
+const file = fileInput.files[0];
+
+const formData = new FormData();
+formData.append('file', file);
+
+const response = await fetch(`http://localhost:3000/agents/${agentId}/avatar`, {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${accessToken}`,
+  },
+  body: formData,
+});
+
+const agent = await response.json();
+console.log('Avatar atualizado:', agent);
+```
+
+**Python:**
+
+```python
+import requests
+
+headers = {
+    'Authorization': f'Bearer {access_token}',
+}
+
+files = {
+    'file': ('avatar.png', open('/caminho/para/avatar.png', 'rb'), 'image/png'),
+}
+
+response = requests.post(
+    f'http://localhost:3000/agents/{agent_id}/avatar',
+    headers=headers,
+    files=files
+)
+
+agent = response.json()
+print(agent)
+```
+
+**Resposta esperada:**
+
+```json
+{
+  "id": "uuid-do-agente",
+  "organizationId": "uuid-da-organizacao",
+  "name": "Atendente Virtual",
+  "avatarUrl": "http://localhost:9000/agent-documents-dev/{orgId}/avatars/{agentId}/avatar.png",
+  "systemPrompt": "Você é um assistente virtual...",
+  "llmModel": "gpt-4o",
+  "temperature": 0.7,
+  "maxTokens": 1000,
+  "isActive": true,
+  "createdAt": "2024-01-15T10:00:00Z",
+  "updatedAt": "2024-01-15T10:30:00Z"
+}
+```
+
+### 3.6 Remover Avatar do Agente
+
+**curl:**
+
+```bash
+curl -X DELETE http://localhost:3000/agents/{agentId}/avatar \
+  -H "Authorization: Bearer SEU_ACCESS_TOKEN"
+```
+
+**JavaScript:**
+
+```javascript
+const accessToken = localStorage.getItem('accessToken');
+
+const response = await fetch(`http://localhost:3000/agents/${agentId}/avatar`, {
+  method: 'DELETE',
+  headers: {
+    'Authorization': `Bearer ${accessToken}`,
+  },
+});
+
+const agent = await response.json();
+console.log('Avatar removido:', agent);
+```
+
+**Python:**
+
+```python
+import requests
+
+headers = {
+    'Authorization': f'Bearer {access_token}',
+}
+
+response = requests.delete(
+    f'http://localhost:3000/agents/{agent_id}/avatar',
+    headers=headers
+)
+
+agent = response.json()
+print(agent)
+```
+
 ---
 
 ## 4. Documentos
